@@ -12,15 +12,27 @@ DEBUG = False
 
 
 class ProxyServer:
+    __instance = None
+    config = {}
     def __init__(self):
+        if ProxyServer.__instance is not None:
+            raise Exception("This class is a singleton!")
+        else:
+            ProxyServer.__instance = self
         with open('config.json') as f:
-            self.config = json.load(f)
+            ProxyServer.config = json.load(f)
 
         self.serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.serverSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.serverSocket.bind(('localhost', self.config['port']))
+        self.serverSocket.bind(('localhost', ProxyServer.config['port']))
         self.serverSocket.listen(BACKLOG)
         self.cache = {}
+
+    @staticmethod
+    def getInstance():
+        if ProxyServer.__instance is None:
+            ProxyServer()
+        return ProxyServer.__instance
 
     def run(self):
         while 1:
@@ -40,15 +52,19 @@ class HandlerThread(Thread):
         # decodedRequest = request.decode('utf-8')
         # print(request)
         if len(request) > 0:
-            parsedRequest = Tools.deserializeHTTPRequest(request)
+            parsedRequest = Tools.deserializeHTTPRequest(request.decode('UTF-8'))
             parsedRequest['httpVersion'] = 'HTTP/1.0'
-            print(parsedRequest)
             if 'Proxy-Connection' in parsedRequest['headers']:
                 parsedRequest['headers'].pop('Proxy-Connection')
+            if ProxyServer.config['privacy']['enable']:
+                parsedRequest['headers']['User-Agent'] = ProxyServer.config['privacy']['userAgent']
+
+            pprint.pprint(parsedRequest)
 
             # create a socket to connect to the web server
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.connect((parsedRequest['webserver']['address'], parsedRequest['webserver']['port']))
+            s.connect((parsedRequest['webserver']['address'],
+                       parsedRequest['webserver']['port']))
             s.send(request)  # send request to webserver
 
             while 1:

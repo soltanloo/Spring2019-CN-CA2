@@ -7,7 +7,7 @@ import json
 import pprint
 
 BACKLOG = 50
-MAX_DATA_RECV = 4096
+MAX_DATA_RECV = 9192
 DEBUG = False
 
 
@@ -20,47 +20,54 @@ class ProxyServer:
         self.serverSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.serverSocket.bind(('localhost', self.config['port']))
         self.serverSocket.listen(BACKLOG)
-        self.__clients = {}
+        self.cache = {}
 
     def run(self):
         while 1:
             conn, client_addr = self.serverSocket.accept()
-            threading.Thread(target=proxy_thread, args=(conn, client_addr)).start()
+            HandlerThread(conn).start()
 
 
 class HandlerThread(Thread):
-    def __init__(self):
+    handlersLock = threading.RLock()
+
+    def __init__(self, clientSocket):
         Thread.__init__(self)
+        self.clientSocket = clientSocket
 
     def run(self):
-        pass
+        request = self.clientSocket.recv(MAX_DATA_RECV)
+        # decodedRequest = request.decode('utf-8')
+        # print(request)
+        if len(request) > 0:
+            parsedRequest = Tools.deserializeHTTPRequest(request)
+            parsedRequest['httpVersion'] = 'HTTP/1.0'
+            print(parsedRequest)
+            if 'Proxy-Connection' in parsedRequest['headers']:
+                parsedRequest['headers'].pop('Proxy-Connection')
 
+            # create a socket to connect to the web server
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.connect((parsedRequest['webserver']['address'], parsedRequest['webserver']['port']))
+            s.send(request)  # send request to webserver
 
-def proxy_thread(conn, client_addr):
-    # get the request from browser
-    request = conn.recv(MAX_DATA_RECV)
-    # decodedRequest = request.decode('utf-8')
-    # print(request)
+            while 1:
+                # receive data from web server
+                try:
+                    data = s.recv(MAX_DATA_RECV)
+                except ConnectionResetError as e:
+                    pass
 
-    parsedRequest = Tools.deserializeHTTPRequest(request.decode('UTF-8'))
-    pprint.pprint(parsedRequest)
-
-    # create a socket to connect to the web server
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.connect((parsedRequest['webserver']['address'], parsedRequest['webserver']['port']))
-    s.send(request)  # send request to webserver
-
-    while 1:
-        # receive data from web server
-        data = s.recv(MAX_DATA_RECV)
-
-        if len(data) > 0:
-            # send to browser
-            conn.send(data)
-        else:
-            break
-    s.close()
-    conn.close()
+                if len(data) > 0:
+                    # send to browser
+                    try:
+                        self.clientSocket.sendall(data)
+                    except BrokenPipeError as e:
+                        pass
+                else:
+                    break
+            s.close()
+            self.clientSocket.close()
 
 
 if __name__ == '__main__':

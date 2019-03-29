@@ -75,9 +75,11 @@ class HandlerThread(Thread):
                     pass
 
                 if len(data) > 0:
+                    print("NEW DATA:")
+                    pprint.pprint(data.decode('UTF-8', errors='ignore'))
                     # send to browser
                     try:
-                        self.clientSocket.sendall(data)
+                        self.clientSocket.send(data)
                     except BrokenPipeError as e:
                         pass
                 else:

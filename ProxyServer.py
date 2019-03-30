@@ -2,18 +2,21 @@ import sys
 from Tools import Tools
 import socket
 import threading
-from threading import Thread
+from threading import Thread, Lock
 import json
 import pprint
 
 BACKLOG = 50
-MAX_DATA_RECV = 9192
+MAX_DATA_RECV = 4096
 DEBUG = False
+HTTP_PORT = 80
+lock = Lock()
 
 
 class ProxyServer:
     __instance = None
     config = {}
+
     def __init__(self):
         if ProxyServer.__instance is not None:
             raise Exception("This class is a singleton!")
@@ -41,49 +44,28 @@ class ProxyServer:
 
 
 class HandlerThread(Thread):
-    handlersLock = threading.RLock()
 
     def __init__(self, clientSocket):
         Thread.__init__(self)
         self.clientSocket = clientSocket
 
     def run(self):
-        request = self.clientSocket.recv(MAX_DATA_RECV)
-        # decodedRequest = request.decode('utf-8')
-        # print(request)
+        request = Tools.recvData(self.clientSocket)
         if len(request) > 0:
-            parsedRequest = Tools.deserializeHTTPRequest(request.decode('UTF-8'))
-            parsedRequest['httpVersion'] = 'HTTP/1.0'
-            if 'Proxy-Connection' in parsedRequest['headers']:
-                parsedRequest['headers'].pop('Proxy-Connection')
-            if ProxyServer.config['privacy']['enable']:
-                parsedRequest['headers']['User-Agent'] = ProxyServer.config['privacy']['userAgent']
-
-            pprint.pprint(parsedRequest)
+            parsedRequest = Tools.parseHTTP(request, 'request')
+            parsedRequest.setHTTPVersion('HTTP/1.0')
+            parsedRequest.printPacket()
 
             # create a socket to connect to the web server
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.connect((parsedRequest['webserver']['address'],
-                       parsedRequest['webserver']['port']))
-            s.send(request)  # send request to webserver
+            s.connect((parsedRequest.getWebServerAddress(),
+                       parsedRequest.getPort()))
+            s.sendall(request)  # send request to webserver
 
-            while 1:
-                # receive data from web server
-                try:
-                    data = s.recv(MAX_DATA_RECV)
-                except ConnectionResetError as e:
-                    pass
-
-                if len(data) > 0:
-                    print("NEW DATA:")
-                    pprint.pprint(data.decode('UTF-8', errors='ignore'))
-                    # send to browser
-                    try:
-                        self.clientSocket.send(data)
-                    except BrokenPipeError as e:
-                        pass
-                else:
-                    break
+            data = Tools.recvData(s)
+            parsedRequest = Tools.parseHTTP(data, 'response')
+            parsedRequest.printPacket()
+            self.clientSocket.send(data)
             s.close()
             self.clientSocket.close()
 

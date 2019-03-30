@@ -61,6 +61,12 @@ class HTTPPacket:
         pprint.pprint(ret)
         print(self.body)
 
+    def getHeaders(self):
+        ret = self.line + '\n'
+        for field in self.header:
+            ret += field + ': ' + self.header[field] + '\n'
+        return ret
+
 
 class HTTPResponsePacket(HTTPPacket):
     def __init__(self, line, header, body):

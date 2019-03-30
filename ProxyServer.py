@@ -1,10 +1,10 @@
 import sys
 from Tools import Tools
 import socket
-import threading
 from threading import Thread, Lock
 import json
 import pprint
+import logging
 
 BACKLOG = 50
 MAX_DATA_RECV = 4096
@@ -25,9 +25,18 @@ class ProxyServer:
         with open('config.json') as f:
             ProxyServer.config = json.load(f)
 
+        logging.basicConfig(filename=self.config['logging']['logFile'], level=logging.DEBUG,
+                            format='[%(asctime)s] %(message)s', datefmt='%d/%b/%Y:%H:%M:%S')
+        if not ProxyServer.config['logging']['enable']:
+            logging.disable(level=logging.INFO)
+
+        logging.info("Proxy launched")
+        logging.info("Creating server socket")
         self.serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.serverSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        logging.info("Binding socket to port %d", ProxyServer.config['port'])
         self.serverSocket.bind(('localhost', ProxyServer.config['port']))
+        logging.info("Listening for incoming requests")
         self.serverSocket.listen(BACKLOG)
         self.cache = {}
 
@@ -39,35 +48,55 @@ class ProxyServer:
 
     def run(self):
         while 1:
-            conn, client_addr = self.serverSocket.accept()
-            HandlerThread(conn).start()
+            clientSocket, clientAddress = self.serverSocket.accept()
+            logging.info("Accepted a request from client!")
+            logging.info("Connection to [%s] from [%s] %s", self.serverSocket.getsockname()[0],
+                         clientAddress[0], clientAddress[1])
+            HandlerThread(clientSocket, clientAddress, name=str(clientAddress[1])).start()
 
 
 class HandlerThread(Thread):
 
-    def __init__(self, clientSocket):
-        Thread.__init__(self)
+    def __init__(self, clientSocket, clientAddress, name):
+        super(HandlerThread, self).__init__(name=name)
         self.clientSocket = clientSocket
+        self.clientAddress = clientAddress
 
     def run(self):
         request = Tools.recvData(self.clientSocket)
         if len(request) > 0:
             parsedRequest = Tools.parseHTTP(request, 'request')
+            logging.info('Client sent request to proxy with headers:\n'
+                         + '----------------------------------------------------------------------\n'
+                         + parsedRequest.getHeaders().rstrip()
+                         + '\n----------------------------------------------------------------------\n')
             parsedRequest.setHTTPVersion('HTTP/1.0')
-            parsedRequest.printPacket()
 
-            # create a socket to connect to the web server
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.connect((parsedRequest.getWebServerAddress(),
-                       parsedRequest.getPort()))
-            s.sendall(request)  # send request to webserver
+            s.connect((parsedRequest.getWebServerAddress(), parsedRequest.getPort()))
+            logging.info("Proxy opening connection to server %s [%s]... Connection opened.",
+                         parsedRequest.getWebServerAddress(),
+                         socket.gethostbyname(parsedRequest.getWebServerAddress()))
+            s.sendall(parsedRequest.pack())
+            logging.info('Proxy sent request to server with headers:\n'
+                         + '----------------------------------------------------------------------\n'
+                         + parsedRequest.getHeaders().rstrip()
+                         + '\n----------------------------------------------------------------------\n')
+            response = Tools.recvData(s)
+            if len(response):
+                parsedResponse = Tools.parseHTTP(response, 'response')
+                logging.info('Server sent response to proxy with headers:\n'
+                             + '----------------------------------------------------------------------\n'
+                             + parsedResponse.getHeaders().rstrip()
+                             + '\n----------------------------------------------------------------------\n')
+                self.clientSocket.send(parsedResponse.pack())
+                logging.info('Proxy sent response to client with headers:\n'
+                             + '----------------------------------------------------------------------\n'
+                             + parsedResponse.getHeaders().rstrip()
+                             + '\n----------------------------------------------------------------------\n')
 
-            data = Tools.recvData(s)
-            parsedRequest = Tools.parseHTTP(data, 'response')
-            parsedRequest.printPacket()
-            self.clientSocket.send(data)
-            s.close()
-            self.clientSocket.close()
+                s.close()
+                self.clientSocket.close()
 
 
 if __name__ == '__main__':

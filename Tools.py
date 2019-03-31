@@ -1,4 +1,6 @@
 from HTTPPacket import HTTPRequestPacket, HTTPResponsePacket
+import gzip
+from bs4 import BeautifulSoup
 
 BUFSIZE = 8192
 TIMEOUT = 10
@@ -55,3 +57,30 @@ class Tools:
             return HTTPRequestPacket(line, header, body)
         elif packType == 'response':
             return HTTPResponsePacket(line, header, body)
+
+    @staticmethod
+    def handleHTTPInjection(parsedResponse, config):
+        if 'text/html' in parsedResponse.getHeader('content-type'):
+            if 'gzip' in parsedResponse.getHeader('content-encoding'):
+                body = gzip.decompress(parsedResponse.getBody()).decode(encoding='UTF-8')
+            else:
+                body = parsedResponse.getBody().decode('UTF-8')
+            soup = BeautifulSoup(body, 'lxml')
+            navbar = soup.new_tag('div')
+            navbar.string = config['HTTPInjection']['post']['body']
+            navbar['style'] = 'position: fixed;' \
+                              'z-index:1000;' \
+                              'top: 0;' \
+                              'height: 30px;' \
+                              'width: 100%;' \
+                              'background-color: green;' \
+                              'display: flex;' \
+                              'justify-content: center;' \
+                              'align-items: center;'
+            soup.body.insert(0, navbar)
+            if 'gzip' in parsedResponse.getHeader('content-encoding'):
+                body = gzip.compress(soup.encode())
+            else:
+                body = soup.encode()
+            parsedResponse.setBody(body)
+        return parsedResponse

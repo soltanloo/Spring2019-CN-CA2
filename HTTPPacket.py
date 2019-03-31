@@ -65,7 +65,7 @@ class HTTPPacket:
         ret = self.line + '\n'
         for field in self.header:
             ret += field + ': ' + self.header[field] + '\n'
-        return ret
+        return ret.rstrip()
 
 
 class HTTPResponsePacket(HTTPPacket):

@@ -68,9 +68,12 @@ class HandlerThread(Thread):
             parsedRequest = Tools.parseHTTP(request, 'request')
             logging.info('Client sent request to proxy with headers:\n'
                          + '----------------------------------------------------------------------\n'
-                         + parsedRequest.getHeaders().rstrip()
+                         + parsedRequest.getHeaders()
                          + '\n----------------------------------------------------------------------\n')
+
             parsedRequest.setHTTPVersion('HTTP/1.0')
+            if ProxyServer.config['privacy']['enable']:
+                parsedRequest.setHeader('user-agent', ProxyServer.config['privacy']['userAgent'])
 
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.connect((parsedRequest.getWebServerAddress(), parsedRequest.getPort()))

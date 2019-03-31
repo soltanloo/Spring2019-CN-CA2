@@ -66,6 +66,14 @@ class HandlerThread(Thread):
 
     def run(self):
         request = Tools.recvData(self.clientSocket)
+        if self.clientAddress[0] not in [u['IP'] for u in ProxyServer.config['accounting']['users']]:
+            self.clientSocket.close()
+            logging.info("User with ip [%s] has no permission no use proxy.", self.clientAddress[0])
+            # TODO: send response and show an error message
+            return
+        else:
+            user = next((u for u in ProxyServer.config['accounting']['users'] if u['IP'] == self.clientAddress[0]), None)
+
         if len(request) > 0:
             parsedRequest = Tools.parseHTTP(request, 'request')
             logging.info('Client sent request to proxy with headers:\n'
@@ -90,22 +98,35 @@ class HandlerThread(Thread):
             response = Tools.recvData(s)
             if len(response):
                 parsedResponse = Tools.parseHTTP(response, 'response')
-                if ProxyServer.config['HTTPInjection']['enable']:
-                    # TODO: check if the index page is requested
-                    parsedResponse = Tools.handleHTTPInjection(parsedResponse, ProxyServer.config)
+                print(parsedResponse.getHeader('content-length'))
+                if int(user['volume']) < int(parsedResponse.getHeader('content-length')):
+                    logging.info("User ran out of traffic.")
+                    s.close()
+                    self.clientSocket.close()
+                else:
+                    # TODO: check response status before reducing traffic
+                    newTraffic = int(user['volume']) - int(parsedResponse.getHeader('content-length'))
+                    for u in ProxyServer.config['accounting']['users']:
+                        if u['IP'] == self.clientAddress[0]:
+                            u['volume'] = str(newTraffic)
+                            print(newTraffic)
+                            break
+                    if ProxyServer.config['HTTPInjection']['enable']:
+                        # TODO: check if the index page is requested
+                        parsedResponse = Tools.handleHTTPInjection(parsedResponse, ProxyServer.config)
 
-                logging.info('Server sent response to proxy with headers:\n'
-                             + '----------------------------------------------------------------------\n'
-                             + parsedResponse.getHeaders().rstrip()
-                             + '\n----------------------------------------------------------------------\n')
-                self.clientSocket.send(parsedResponse.pack())
-                logging.info('Proxy sent response to client with headers:\n'
-                             + '----------------------------------------------------------------------\n'
-                             + parsedResponse.getHeaders().rstrip()
-                             + '\n----------------------------------------------------------------------\n')
+                    logging.info('Server sent response to proxy with headers:\n'
+                                 + '----------------------------------------------------------------------\n'
+                                 + parsedResponse.getHeaders().rstrip()
+                                 + '\n----------------------------------------------------------------------\n')
+                    self.clientSocket.send(parsedResponse.pack())
+                    logging.info('Proxy sent response to client with headers:\n'
+                                 + '----------------------------------------------------------------------\n'
+                                 + parsedResponse.getHeaders().rstrip()
+                                 + '\n----------------------------------------------------------------------\n')
 
-                s.close()
-                self.clientSocket.close()
+                    s.close()
+                    self.clientSocket.close()
 
 
 if __name__ == '__main__':

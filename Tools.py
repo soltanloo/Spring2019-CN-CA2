@@ -13,7 +13,7 @@ class Tools:
         conn.settimeout(TIMEOUT)
         data = conn.recv(BUFSIZE)
         if not data:
-            return None
+            return ""
         while b'\r\n\r\n' not in data:
             data += conn.recv(BUFSIZE)
         packet = Tools.parseHTTP(data, 'response')

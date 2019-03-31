@@ -40,6 +40,12 @@ class HTTPPacket:
     def getBodySize(self):
         return len(self.body)
 
+    def getBody(self):
+        return self.body
+
+    def setBody(self, body):
+        self.body = body
+
     def getMethod(self):
         return self.line.split(' ')[0].upper()
 

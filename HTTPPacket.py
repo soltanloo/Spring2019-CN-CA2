@@ -52,13 +52,6 @@ class HTTPPacket:
     def getResponseCode(self):
         return int(self.line.split(' ')[1])
 
-    # Remove hostname from request packet line
-    def setURL(self, url):
-        new_line = self.line.split(' ')
-        new_line[1] = new_line[1].replace('http://' + url.netloc, '')
-        new_line[1] = new_line[1].replace(url.netloc, '')
-        self.line = ' '.join(new_line)
-
     def printPacket(self):
         ret = self.line + CRLF
         for field in self.header:
@@ -82,6 +75,10 @@ class HTTPResponsePacket(HTTPPacket):
 class HTTPRequestPacket(HTTPPacket):
     def __init__(self, line, header, body):
         super().__init__(line, header, body)
+        self.cacheURL = self.cacheURL = self.line.split(' ')[1]
+
+    def getFullURL(self):
+        return self.cacheURL
 
     def getWebServerAddress(self):
         hostAddress = self.getHeader('Host')
@@ -101,6 +98,13 @@ class HTTPRequestPacket(HTTPPacket):
         else:
             port = int(hostAddress[(portPos + 1):])
         return port
+
+    def removeHostname(self):
+        url = self.getWebServerAddress()
+        new_line = self.line.split(' ')
+        new_line[1] = new_line[1].replace('http://' + url, '')
+        new_line[1] = new_line[1].replace(url, '')
+        self.line = ' '.join(new_line)
 
     def setHTTPVersion(self, ver):
         new_line = self.line.split(' ')

@@ -12,7 +12,7 @@
   },
 
   "privacy": {
-    "enable": true,
+    "enable": false,
     "userAgent": "CN Proxy Server (v1.0.0)"
   },
 
@@ -40,7 +40,7 @@
 	},
 	
   "HTTPInjection": {
-    "enable": true,
+    "enable": false,
     "post": {
       "body": "پروژه 2 درس شبکه های کامپیوتری"
     }

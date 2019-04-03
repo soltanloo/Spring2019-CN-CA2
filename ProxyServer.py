@@ -200,6 +200,7 @@ class ProxyServer:
             if 'no-cache' in parsedRequest.getHeader('pragma') or 'no-cache' in parsedRequest.getHeader(
                     'cache-control'):
                 print('doesn\'t want to use cache')
+                logging.info("User doesn\'t want to use cache;\n")
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 s.connect((parsedRequest.getWebServerAddress(), parsedRequest.getPort()))
                 logging.info("Proxy opening connection to server %s [%s]... Connection opened.",
@@ -215,29 +216,47 @@ class ProxyServer:
                 s.close()
             else:
                 print('wants to use cache')
+                logging.info("User wants to use cache;\n")
                 url = parsedRequest.getFullURL()
                 if url in self.cache:
                     print('url in cache', url)
+                    logging.info("URL: " 
+                                 + url
+                                 + " found in cached urls\n")
                     if self.cache[url]['packet'].getHeader('expires') != "":
                         expTime = datetime.datetime.strptime(self.cache[url]['packet'].getHeader('expires'),
                                                              '%a, %d %b %Y %H:%M:%S GMT')
                         currTime = datetime.datetime.now()
                         if expTime < currTime:
+                            logging.info("Response is Expired\n")
                             response = self.cache[url]['packet']
                             newRequest = parsedRequest.setHeader('if-modified-since', response.getHeader('date'))
                             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                            logging.info("Proxy opening connection to server %s [%s]... Connection opened.",
+                                                        parsedRequest.getWebServerAddress(),
+                                                        socket.gethostbyname(parsedRequest.getWebServerAddress()))
                             s.connect((parsedRequest.getWebServerAddress(), parsedRequest.getPort()))
                             # parsedRequest.removeHostname()
                             s.sendall(newRequest.pack())
+                            logging.info('Proxy sent request to server with headers:\n'
+                                        + '----------------------------------------------------------------------\n'
+                                        + newRequest.getHeaders().rstrip()
+                                        + '\n----------------------------------------------------------------------\n')
                             newResponse = self.recvData(s)
+                            logging.info('Server sent response to proxy with headers:\n'
+                                 + '----------------------------------------------------------------------\n'
+                                 + newResponse.getHeaders().rstrip()
+                                 + '\n----------------------------------------------------------------------\n')
                             s.close()
                             newResponse = Tools.parseHTTP(newResponse, 'response')
                             if newResponse.getResponseCode() == 304:
+                                logging.info("Response code is 304; Has not been modified since last time\n")
                                 lock.acquire()
                                 self.cache[url]['packet'] = response.setHeader('date', newResponse.getHeader('date'))
                                 self.cache[url]['lastUsage'] = datetime.datetime.now()
                                 lock.release()
                             if newResponse.getResponseCode() == 200:
+                                logging.info("Response code is 200; Replacing new response\n")
                                 lock.acquire()
                                 self.cache[url]['packet'] = newResponse
                                 self.cache[url]['lastUsage'] = datetime.datetime.now()
@@ -245,11 +264,13 @@ class ProxyServer:
                             response = self.cache[url]['packet']
                         else:
                             print("Using cache")
+                            logging.info("Response is still valid!\n")
                             response = self.cache[url]['packet'].pack()
                             lock.acquire()
                             self.cache[url]['lastUsage'] = datetime.datetime.now()
                             lock.release()
                     else:
+                        logging.info("Expire date is not set;\n")
                         lastMod = datetime.datetime.strptime(self.cache[url]['packet'].getHeader('last-modified'),
                                                              '%a, %d %b %Y %H:%M:%S GMT')
                         currTime = datetime.datetime.now()
@@ -257,18 +278,31 @@ class ProxyServer:
                             response = self.cache[url]['packet']
                             newRequest = parsedRequest.setHeader('if-modified-since', response.getHeader('date'))
                             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                            logging.info("Proxy opening connection to server %s [%s]... Connection opened.",
+                                                        parsedRequest.getWebServerAddress(),
+                                                        socket.gethostbyname(parsedRequest.getWebServerAddress()))
                             s.connect((parsedRequest.getWebServerAddress(), parsedRequest.getPort()))
                             # parsedRequest.removeHostname()
                             s.sendall(newRequest.pack())
+                            logging.info('Proxy sent request to server with headers:\n'
+                                        + '----------------------------------------------------------------------\n'
+                                        + newRequest.getHeaders().rstrip()
+                                        + '\n----------------------------------------------------------------------\n')
                             newResponse = self.recvData(s)
+                            logging.info('Server sent response to proxy with headers:\n'
+                                 + '----------------------------------------------------------------------\n'
+                                 + newResponse.getHeaders().rstrip()
+                                 + '\n----------------------------------------------------------------------\n')
                             s.close()
                             newResponse = Tools.parseHTTP(newResponse, 'response')
                             if newResponse.getResponseCode() == 304:
+                                logging.info("Response code is 304; Has not been modified since last time\n")
                                 lock.acquire()
                                 self.cache[url]['lastUsage'] = datetime.datetime.now()
                                 lock.release()
                                 pass
                             if newResponse.getResponseCode() == 200:
+                                logging.info("Response code is 200; Replacing new response\n")
                                 lock.acquire()
                                 self.cache[url]['packet'] = newResponse
                                 self.cache[url]['lastUsage'] = datetime.datetime.now()
@@ -282,6 +316,9 @@ class ProxyServer:
                             lock.release()
                 else:
                     print('url not in cache', url)
+                    logging.info("URL: " 
+                                 + url
+                                 + " NOT found in cached urls\n")
                     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     s.connect((parsedRequest.getWebServerAddress(), parsedRequest.getPort()))
                     logging.info("Proxy opening connection to server %s [%s]... Connection opened.",
@@ -294,6 +331,10 @@ class ProxyServer:
                                  + parsedRequest.getHeaders().rstrip()
                                  + '\n----------------------------------------------------------------------\n')
                     response = self.recvData(s)
+                    logging.info('Server sent response to proxy with headers:\n'
+                                 + '----------------------------------------------------------------------\n'
+                                 + response.getHeaders().rstrip()
+                                 + '\n----------------------------------------------------------------------\n')
                     s.close()
 
             if len(response):
@@ -307,6 +348,9 @@ class ProxyServer:
                     # TODO: check if user wanted to cache
                     if len(self.cache) < self.config['caching']['size']:
                         print('caching', parsedRequest.getFullURL())
+                        logging.info("Caching URL: "
+                                     + parsedRequest.getFullURL()
+                                     + " \n")
                         lock.acquire()
                         self.cache[parsedRequest.getFullURL()] = {}
                         self.cache[parsedRequest.getFullURL()]['packet'] = parsedResponse
@@ -314,12 +358,16 @@ class ProxyServer:
                         lock.release()
                     else:
                         print('cache capacity is full')
+                        logging.info("Cache capacity is full, Deleting Least recently used URL\n")
                         lru = {'lastUsage': datetime.datetime.now(), 'packet': None}
                         lruKey = ''
                         for key in self.cache:
                             if self.cache[key]['lastUsage'] < lru['lastUsage']:
                                 lru = self.cache[key]
                                 lruKey = key
+                        logging.info("Least recently used URL: \n"
+                                     + self.cache[lruKey]
+                                     + " \n")
                         lock.acquire()
                         self.cache.pop(lruKey)
                         self.cache[parsedRequest.getFullURL()] = {}

@@ -17,7 +17,7 @@
   },
 
   "restriction": {
-    "enable": true,
+    "enable": false,
     "targets": [
       {
         "URL": "sib.ir",

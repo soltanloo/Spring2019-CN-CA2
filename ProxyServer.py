@@ -191,7 +191,7 @@ class ProxyServer:
             response = self.getServerResponse(parsedRequest)
             if len(response):
                 parsedResponse = ProxyServer.parseHTTP(response, 'response')
-                if self.config['HTTPInjection']['enable'] and parsedRequest.getFullURL() is "/":
+                if self.config['HTTPInjection']['enable'] and parsedRequest.getURL() is "/":
                     parsedResponse = self.handleHTTPInjection(parsedResponse, self.config)
 
                 if self.canCache(parsedResponse) \
@@ -212,7 +212,7 @@ class ProxyServer:
                 else:
                     contentLength = parsedResponse.getBodySize()
                 if int(user['volume']) < contentLength:
-                    logging.info("User ran out of traffic.")
+                    logging.info("User with IP " + user['IP'] + "ran out of traffic.")
                     clientSocket.close()
                 else:
                     newTraffic = int(user['volume']) - contentLength
@@ -281,47 +281,50 @@ class ProxyServer:
         if not self.config['caching']['enable'] \
                 or 'no-cache' in parsedRequest.getHeader('pragma') \
                 or 'no-cache' in parsedRequest.getHeader('cache-control'):
-            logging.info("Caching is disabled")
+            logging.info("Caching is disabled or user wants no cache")
             response = self.sendRequestAndReceiveResponse(parsedRequest)
         else:
-            logging.info("Caching is enabled")
+            logging.info("Cache will be used for " + parsedRequest.getFullURL())
             response = self.useCache(parsedRequest)
         return response
 
     def useCache(self, parsedRequest):
         url = parsedRequest.getFullURL()
         if url in self.cache:
-            logging.info("URL: "
-                         + url
-                         + " found in cached urls")
+            logging.info("HIT: URL " + url + " found in cached urls")
             if self.cache[url]['packet'].getHeader('expires') != "":
                 expTime = datetime.datetime.strptime(self.cache[url]['packet'].getHeader('expires'),
                                                      '%a, %d %b %Y %H:%M:%S GMT')
                 currTime = datetime.datetime.now()
                 if expTime < currTime:
-                    logging.info("Cached response is expired")
+                    logging.info("Cached response for" + url + " is expired")
                     response = self.handleExpiredCache(parsedRequest, url)
                 else:
-                    logging.info("Cached response is still valid")
+                    logging.info("Cached response for" + url + " is still valid")
                     response = self.cache[url]['packet'].pack()
                     lock.acquire()
                     self.cache[url]['lastUsage'] = datetime.datetime.now()
                     lock.release()
-            else:
-                logging.info("Expiration date is not set")
+            elif self.cache[url]['packet'].getHeader('last-modified') != "":
+                logging.info("Expiration date is not set for " + url)
                 lastMod = datetime.datetime.strptime(self.cache[url]['packet'].getHeader('last-modified'),
                                                      '%a, %d %b %Y %H:%M:%S GMT')
                 currTime = datetime.datetime.now()
                 if lastMod < currTime:
                     response = self.handleExpiredCache(parsedRequest, url)
                 else:
-                    logging.info("Cached response is still valid")
+                    logging.info("Cached response for" + url + " is still valid")
                     response = self.cache[url]['packet'].pack()
                     lock.acquire()
                     self.cache[url]['lastUsage'] = datetime.datetime.now()
                     lock.release()
+            else:
+                response = self.cache[url]['packet'].pack()
+                lock.acquire()
+                self.cache[url]['lastUsage'] = datetime.datetime.now()
+                lock.release()
         else:
-            logging.info("URL: " + url + " not found in cache")
+            logging.info("MISS: URL " + url + " not found in cache")
             response = self.sendRequestAndReceiveResponse(parsedRequest)
         return response
 
@@ -331,13 +334,13 @@ class ProxyServer:
         response = self.sendRequestAndReceiveResponse(newRequest)
         newResponse = ProxyServer.parseHTTP(response, 'response')
         if newResponse.getResponseCode() == 304:
-            logging.info("Response code is 304; Has not been modified since last time")
+            logging.info("Response code is 304; Has not been modified since last time.\n URL: " + url)
             lock.acquire()
             self.cache[url]['packet'] = cachedResponse.setHeader('date', newResponse.getHeader('date'))
             self.cache[url]['lastUsage'] = datetime.datetime.now()
             lock.release()
         if newResponse.getResponseCode() == 200:
-            logging.info("Response code is 200; Replacing new response")
+            logging.info("Response code is 200; Replacing new response.\n URL: " + url)
             lock.acquire()
             self.cache[url]['packet'] = newResponse
             self.cache[url]['lastUsage'] = datetime.datetime.now()

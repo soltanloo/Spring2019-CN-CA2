@@ -6,11 +6,10 @@ bCRLF = b'\r\n'
 
 class HTTPPacket:
     def __init__(self, line, header, body):
-        self.line = line  # Packet first line(String)
-        self.header = header  # Headers(Dict.{Field:Value})
-        self.body = body  # Body(Bytes)
+        self.line = line
+        self.header = header
+        self.body = body
 
-    # Make encoded packet data
     def pack(self):
         ret = self.line + CRLF
         for field in self.header:
@@ -20,20 +19,14 @@ class HTTPPacket:
         ret += self.body
         return ret
 
-    # Get HTTP header value
-    # If does not exist, return empty string
     def getHeader(self, field):
         return self.header.get(field.lower(), "")
 
-    # Set HTTP header value
-    # If not exist, add new field
-    # If value is empty string, remove field
     def setHeader(self, field, value):
         self.header[field.lower()] = value
         if value == '':
             self.header.pop(field.lower(), None)
 
-    # Get URL from request packet line
     def getURL(self):
         return self.line.split(' ')[1]
 
@@ -82,8 +75,8 @@ class HTTPRequestPacket(HTTPPacket):
 
     def getWebServerAddress(self):
         hostAddress = self.getHeader('Host')
-        portPos = hostAddress.find(COLON)  # find the port pos (if any)
-        if portPos == -1:  # default port
+        portPos = hostAddress.find(COLON)
+        if portPos == -1:
             webServerAddress = hostAddress
         else:
             webServerAddress = hostAddress[:portPos]
@@ -92,7 +85,7 @@ class HTTPRequestPacket(HTTPPacket):
 
     def getPort(self):
         hostAddress = self.getHeader('Host')
-        portPos = hostAddress.find(':')  # find the port pos (if any)
+        portPos = hostAddress.find(':')
         if portPos == -1:
             port = 80
         else:

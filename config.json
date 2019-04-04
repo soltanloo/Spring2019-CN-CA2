@@ -12,12 +12,12 @@
   },
 
   "privacy": {
-    "enable": false,
+    "enable": true,
     "userAgent": "CN Proxy Server (v1.0.0)"
   },
 
   "restriction": {
-    "enable": false,
+    "enable": true,
     "targets": [
       {
         "URL": "sib.ir",
@@ -30,17 +30,17 @@
     ]
   },
   
-	"accounting":{
-		"users":[
-			{
-				"IP": "127.0.0.1",
-				"volume":"80000000"
-			}
-		]
-	},
+  "accounting":{
+      "users":[
+          {
+              "IP": "127.0.0.1",
+              "volume":"80000000"
+          }
+      ]
+  },
 	
   "HTTPInjection": {
-    "enable": false,
+    "enable": true,
     "post": {
       "body": "پروژه 2 درس شبکه های کامپیوتری"
     }
